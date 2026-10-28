@@ -12,10 +12,14 @@ $scenes = @(
     @('yo-yo', 'yoyo', @(, @('yoyo2', 14, 6))), @('stretch', 'stretch', @()), @('look', 'lookL', @()),
     @('typing', 'work1', @(, @('dot', 13, -1))), @('idea', 'work3', @(, @('bulb', 6, -5))), @('grr', 'workAngry', @(, @('grr', 12, -3))),
     @('hmm?', 'workScratch', @(, @('what', 14, -5))), @('sweat', 'work2', @(, @('sweat', 13, 2))), @('done', 'done', @(@('dot', 1, -3), @('dot', 8, -4), @('dot', 15, -2))),
-    @('needs you', 'attn1', @(, @('bang', 1, -5))), @('error', 'error', @(, @('smoke', 6, -4)))
+    @('needs you', 'attn1', @(, @('bang', 1, -5))), @('error', 'error', @(, @('smoke', 6, -4))),
+    @('gum', 'plain', @(, @('gum3', 5, 4))), @('juggle', 'juggle', @(@('ballR', 3, -3), @('ballB', 8, -5), @('ballZ', 13, -3))),
+    @('gamer', 'gamer2', @()), @('cat visit', 'lookR', @(@('cat1', 13, 7), @('heart', 11, -3))), @('meditate', 'meditate', @(, @('sparkle', 12, -4))),
+    @('bug!', 'work1', @(, @('bug', 6, 7))), @('search', 'work3', @(, @('lens', 10, -5))), @('yes!', 'workYes', @(, @('check', 6, -5))),
+    @('facepalm', 'workPalm', @(, @('sweat', 13, 2))), @('loading', 'work2', @(, @('bar3', 2, -4)))
 )
 
-$px = 5; $cellW = 110; $cellH = 110; $cols = 6
+$px = 5; $cellW = 110; $cellH = 110; $cols = 7
 $rows = [math]::Ceiling($scenes.Count / $cols)
 $visual = New-Object Windows.Media.DrawingVisual
 $dc = $visual.RenderOpen()

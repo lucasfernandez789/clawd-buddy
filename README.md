@@ -6,8 +6,8 @@ A tiny pixel companion for Claude Code on Windows. It sits in the bottom-right c
 
 | State | When | What it does |
 |---|---|---|
-| Idle | No session needs you | Reads a book, blinks and turns pages. Every 20-45 s it does something at random: drinks mate, listens to music, plays with a yo-yo, stretches or looks around. After 10 idle minutes it falls asleep |
-| Working | You sent a prompt | Types on a laptop. Every 6-15 s it has an idea (light bulb), grumbles, scratches its head, sweats, types at full speed or looks up thinking |
+| Idle | No session needs you | Reads a book, blinks and turns pages. Every 20-45 s it does something at random: drinks mate, listens to music, plays with a yo-yo, stretches, looks around, blows bubble gum, juggles, plays a handheld console, gets a visit from a cat, dances or meditates. After 10 idle minutes it falls asleep |
+| Working | You sent a prompt | Types on a laptop. Every 6-15 s it has an idea (light bulb), grumbles, scratches its head, sweats, types at full speed, looks up thinking, squashes a bug crawling on the laptop, searches with a magnifier, celebrates, facepalms, watches a loading bar or takes a mate break |
 | Done | Claude finished its turn | Jumps with confetti, shows a green bubble with the first line of the answer, chimes |
 | Needs you | Permission or input required | Waves under a blinking "!", shows an amber bubble, chimes |
 | Error | The turn failed (rate limit, API error...) | Shakes with X eyes and smoke, red bubble, alert sound |
@@ -67,7 +67,7 @@ Removes only the `clawd-buddy` hooks and stops the avatar.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\run.ps1
 ```
 
-To regenerate the scene sheet after editing sprites:
+Drawings live in `lib/sprites.json` as plain data: each letter is one pixel colored by the palette, and a dot is transparent. To regenerate the scene sheet after editing them:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Sta -File .\tools\preview.ps1

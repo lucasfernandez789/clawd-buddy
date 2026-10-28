@@ -180,9 +180,18 @@ function Update-State {
 # Random little scenes. Idle: every 20-45 s for 6-10 s. Working: every 6-15 s for 2-5 s.
 # Gaps and lengths are in ticks (120 ms).
 $ActivityPlans = @{
-    idle    = @{ Pool = @('mate', 'music', 'yoyo', 'stretch', 'look'); Gap = @(170, 380); Length = @(50, 85) }
-    working = @{ Pool = @('idea', 'angry', 'scratch', 'sweat', 'fast', 'think'); Gap = @(50, 125); Length = @(20, 40) }
+    idle    = @{
+        Pool   = @('mate', 'music', 'yoyo', 'stretch', 'look', 'gum', 'juggle', 'gamer', 'cat', 'dance', 'meditate')
+        Gap    = @(170, 380); Length = @(50, 85)
+    }
+    working = @{
+        Pool   = @('idea', 'angry', 'scratch', 'sweat', 'fast', 'think', 'bug', 'search', 'yes', 'facepalm', 'loading', 'matebreak')
+        Gap    = @(50, 125); Length = @(20, 40)
+    }
 }
+# Loop the juggled balls follow over the head, in grid cells.
+$JugglePath = @(@(2, -1), @(3, -3), @(5, -5), @(8, -5), @(11, -5), @(13, -3), @(14, -1), @(11, -2), @(8, -3), @(5, -2))
+$FloatPath = @(0, -1, -2, -3, -4, -5, -4, -3, -2, -1)
 $script:random = New-Object System.Random
 $script:activity = $null
 $script:activityStart = 0
@@ -221,6 +230,47 @@ function Update-Activity([string]$State) {
         'sweat'   { Draw-Sprite $typing 0 0 @(, @('sweat', 13, (1 + ([math]::Floor($e / 3) % 4)))) }
         'fast'    { Draw-Sprite $(if ($e % 2) { 'work1' } else { 'work2' }) 0 0 @(@('dot', (1 + ($e % 3)), -1), @('dot', (13 - ($e % 3)), -2)) }
         'think'   { Draw-Sprite 'work3' 0 0 @(, @('sparkle', 13, -3)) }
+        'bug' {
+            # A literal bug crawls over the laptop until it gets squashed.
+            $length = $script:activityEnd - $script:activityStart
+            if ($e -lt ($length * 0.7)) { Draw-Sprite $typing 0 0 @(, @('bug', (3 + [math]::Floor($e / 2) % 8), 7)) }
+            else { Draw-Sprite 'workAngry' 0 0 @(, @('splat', 8, 6)) }
+        }
+        'search'    { Draw-Sprite 'work3' 0 0 @(, @('lens', (9 + [math]::Abs(([math]::Floor($e / 3) % 6) - 3)), -5)) }
+        'yes'       { Draw-Sprite 'workYes' 0 $(if ($e -lt 4) { -4 } else { 0 }) @(, @('check', 6, -5)) }
+        'facepalm'  { Draw-Sprite 'workPalm' 0 0 @(, @('sweat', 13, (1 + ([math]::Floor($e / 3) % 3)))) }
+        'loading'   { Draw-Sprite $typing 0 0 @(, @("bar$([math]::Min(5, [math]::Floor($e / 4)))", 2, -4)) }
+        'matebreak' { Draw-Sprite $(if ($e % 20 -lt 10) { 'mate1' } else { 'mate2' }) }
+        'gum' {
+            $phase = $e % 32
+            if ($phase -lt 8) { Draw-Sprite 'plain' 0 0 @(, @('gum1', 7, 5)) }
+            elseif ($phase -lt 16) { Draw-Sprite 'plain' 0 0 @(, @('gum2', 6, 4)) }
+            elseif ($phase -lt 26) { Draw-Sprite 'plain' 0 0 @(, @('gum3', 5, 4)) }
+            else { Draw-Sprite 'plain' 0 0 @(, @('pop', 5, 4)) }
+        }
+        'juggle' {
+            $balls = @()
+            foreach ($i in 0..2) {
+                $point = $JugglePath[([math]::Floor($e / 2) + $i * 3) % $JugglePath.Count]
+                $balls += , @(@('ballR', 'ballB', 'ballZ')[$i], $point[0], $point[1])
+            }
+            Draw-Sprite 'juggle' 0 0 $balls
+        }
+        'gamer' { Draw-Sprite $(if ([math]::Floor($e / 2) % 2) { 'gamer1' } else { 'gamer2' }) }
+        'cat' {
+            $effects = @(, @($(if ([math]::Floor($e / 4) % 2) { 'cat1' } else { 'cat2' }), 13, 7))
+            if ($e % 20 -lt 8) { $effects += , @('heart', 11, -3) }
+            Draw-Sprite 'lookR' 0 0 $effects
+        }
+        'dance' {
+            $beat = [math]::Floor($e / 3) % 2
+            Draw-Sprite $(if ($beat) { 'done' } else { 'plain' }) $(if ($beat) { 3 } else { -3 }) 0 @(, @('note', $(if ($beat) { 1 } else { 13 }), -3))
+        }
+        'meditate' {
+            $effects = @()
+            if ($e % 24 -lt 6) { $effects = @(, @('sparkle', 12, -4)) }
+            Draw-Sprite 'meditate' 0 $FloatPath[[math]::Floor($e / 2) % $FloatPath.Count] $effects
+        }
         'mate'    { Draw-Sprite $(if ($e % 27 -lt 15) { 'mate1' } else { 'mate2' }) }
         'music'   {
             $bob = if ([math]::Floor($e / 3) % 2) { -3 } else { 0 }
