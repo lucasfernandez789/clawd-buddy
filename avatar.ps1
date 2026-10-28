@@ -261,7 +261,9 @@ function Update-Animation {
         }
         'attention' {
             $frame = if ([math]::Floor($t / 3) % 2) { 'attn1' } else { 'attn2' }
-            $effects = if ([math]::Floor($t / 4) % 2) { @(, @('bang', 1, -5)) } else { @() }
+            # Assign inside the branch: "$x = if" unrolls the outer array and breaks the effect.
+            $effects = @()
+            if ([math]::Floor($t / 4) % 2) { $effects = @(, @('bang', 1, -5)) }
             Draw-Sprite $frame 0 0 $effects
         }
         'error' {
