@@ -1,0 +1,44 @@
+{
+  "en": {
+    "done": "Done",
+    "attention": "Needs you",
+    "error": "Error",
+    "permission": "Needs permission: {0}",
+    "permissionGeneric": "Needs your permission",
+    "noSessions": "Clawd Buddy - no sessions",
+    "mute": "Mute sounds",
+    "quit": "Quit",
+    "states": { "idle": "idle", "working": "working", "done": "done", "attention": "needs you", "error": "error" },
+    "errors": {
+      "rate_limit": "Rate limit reached",
+      "overloaded": "API overloaded, try again soon",
+      "authentication_failed": "Authentication failed",
+      "billing_error": "Billing problem",
+      "server_error": "Server error",
+      "max_output_tokens": "Response hit the output limit",
+      "invalid_request": "Invalid request",
+      "model_not_found": "Model not found"
+    }
+  },
+  "es": {
+    "done": "Listo",
+    "attention": "Te necesita",
+    "error": "Error",
+    "permission": "Pide permiso: {0}",
+    "permissionGeneric": "Necesita tu permiso",
+    "noSessions": "Clawd Buddy - sin sesiones",
+    "mute": "Silenciar sonidos",
+    "quit": "Salir",
+    "states": { "idle": "en reposo", "working": "trabajando", "done": "terminó", "attention": "te necesita", "error": "error" },
+    "errors": {
+      "rate_limit": "Se alcanzó el límite de uso",
+      "overloaded": "La API está saturada, intenta de nuevo en un momento",
+      "authentication_failed": "Falló la autenticación",
+      "billing_error": "Problema de facturación",
+      "server_error": "Error del servidor",
+      "max_output_tokens": "La respuesta llegó al límite de salida",
+      "invalid_request": "Pedido inválido",
+      "model_not_found": "Modelo no encontrado"
+    }
+  }
+}

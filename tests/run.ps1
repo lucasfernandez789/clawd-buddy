@@ -18,6 +18,34 @@ foreach ($name in $Frames.Keys) {
     Assert ($rows.Count -eq 11 -and $badRows.Count -eq 0 -and $badChars.Count -eq 0) "sprite '$name' is a valid 16x11 frame"
 }
 
+foreach ($name in $Overlays.Keys) {
+    $badChars = @(($Overlays[$name] -join '').ToCharArray() | Where-Object { $_ -ne '.' -and -not $Palette.ContainsKey([string]$_) })
+    Assert ($badChars.Count -eq 0) "overlay '$name' uses palette colors only"
+}
+
+# Strings: every language has the same keys as English.
+$stringsPath = Join-Path $root 'lib\strings.json'
+$all = [IO.File]::ReadAllText($stringsPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+$keys = { param($o) ($o.PSObject.Properties | ForEach-Object {
+    if ($_.Value -is [pscustomobject]) { $p = $_.Name; $_.Value.PSObject.Properties.Name | ForEach-Object { "$p.$_" } } else { $_.Name } }) | Sort-Object }
+$enKeys = (& $keys $all.en) -join ','
+foreach ($lang in $all.PSObject.Properties.Name) {
+    Assert ((& $keys $all.$lang) -join ',' -eq $enKeys) "strings '$lang' match the English keys"
+}
+$es = Get-Strings $stringsPath 'es'
+$en = Get-Strings $stringsPath 'xx'
+Assert ($es.done -eq 'Listo' -and $en.done -eq 'Done') 'Spanish loads, unknown language falls back to English'
+Assert ($es.states.done -eq ('termin' + [char]0x00F3)) 'accented text survives the UTF-8 read'
+
+$b = Format-Bubble ([pscustomobject]@{ state = 'attention'; tool = 'Bash'; detail = '' }) $es
+Assert ($b.title -eq 'Te necesita' -and $b.detail -eq 'Pide permiso: Bash') 'permission bubble is localized'
+$b = Format-Bubble ([pscustomobject]@{ state = 'attention'; tool = ''; detail = 'Claude needs input' }) $es
+Assert ($b.detail -eq 'Claude needs input') 'notification text is kept as sent'
+$b = Format-Bubble ([pscustomobject]@{ state = 'error'; code = 'rate_limit'; detail = '429' }) $es
+Assert ($b.detail -eq ('Se alcanz' + [char]0x00F3 + ' el l' + [char]0x00ED + 'mite de uso - 429')) 'known error code is translated'
+$b = Format-Bubble ([pscustomobject]@{ state = 'error'; code = 'weird_new_code'; detail = '' }) $es
+Assert ($b.detail -eq 'weird_new_code') 'unknown error code is shown raw'
+
 # Event mapping.
 $ev = { param($h) [pscustomobject]$h }
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'UserPromptSubmit'; cwd = 'C:\repos\api' }) $null 100
@@ -25,9 +53,9 @@ Assert ($s.state -eq 'working' -and $s.project -eq 'api') 'UserPromptSubmit -> w
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Stop'; last_assistant_message = "## Summary`n**Fixed** the bug" }) $null 100
 Assert ($s.state -eq 'done' -and $s.detail -eq 'Summary') 'Stop -> done with first clean line'
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'StopFailure'; error = 'rate_limit'; error_details = '429' }) $null 100
-Assert ($s.state -eq 'error' -and $s.detail -eq 'rate_limit: 429') 'StopFailure -> error with details'
+Assert ($s.state -eq 'error' -and $s.code -eq 'rate_limit' -and $s.detail -eq '429') 'StopFailure -> error with code and details'
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'PermissionRequest'; tool_name = 'Bash' }) $null 100
-Assert ($s.state -eq 'attention' -and $s.detail -eq 'Needs permission: Bash') 'PermissionRequest -> attention'
+Assert ($s.state -eq 'attention' -and $s.tool -eq 'Bash') 'PermissionRequest -> attention with tool'
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Notification'; notification_type = 'idle_prompt' }) $null 100
 Assert ($null -eq $s) 'idle_prompt notification is ignored'
 $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Notification'; notification_type = 'permission_prompt'; message = 'x' }) ([pscustomobject]@{ state = 'attention' }) 100
@@ -85,6 +113,10 @@ try {
     Assert (-not (Test-Path $file)) 'SessionEnd removes the session'
     'not json' | powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hook -StateDir $stateDir
     Assert ($LASTEXITCODE -eq 0) 'bad input still exits 0'
+
+    # Avatar renders every state and scene without throwing.
+    $result = powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -File (Join-Path $root 'avatar.ps1') -StateDir $stateDir -SelfTest
+    Assert ($LASTEXITCODE -eq 0) "avatar renders every state and scene ($result)"
 }
 finally {
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

@@ -33,14 +33,12 @@ function ConvertTo-SessionState {
         }
         'UserPromptSubmit' { return $base + @{ state = 'working'; detail = '' } }
         'Stop' { return $base + @{ state = 'done'; detail = Get-FirstLine $HookEvent.last_assistant_message } }
+        # The avatar localizes 'code' and 'tool'; 'detail' keeps the raw text.
         'StopFailure' {
-            $detail = (@($HookEvent.error, $HookEvent.error_details) | Where-Object { $_ }) -join ': '
-            return $base + @{ state = 'error'; detail = $detail }
+            return $base + @{ state = 'error'; code = [string]$HookEvent.error; detail = [string]$HookEvent.error_details }
         }
         'PermissionRequest' {
-            $detail = 'Needs your permission'
-            if ($HookEvent.tool_name) { $detail = "Needs permission: $($HookEvent.tool_name)" }
-            return $base + @{ state = 'attention'; detail = $detail }
+            return $base + @{ state = 'attention'; tool = [string]$HookEvent.tool_name; detail = '' }
         }
         # Fallback only: it arrives late for permissions and repeats idle noise.
         'Notification' {
@@ -64,6 +62,35 @@ function Get-EffectiveState {
     # A closed terminal sends no SessionEnd, so a silent "working" session goes stale.
     if ($state -eq 'working' -and $Now - [math]::Max($ts, $TranscriptMtime) -gt 15 * 60 * 1000) { return 'idle' }
     return $state
+}
+
+# Loads UI strings for a language, falling back to English. Read as UTF-8 explicitly.
+function Get-Strings {
+    param([string]$Path, [string]$Language)
+    $all = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    if ($Language -and $all.PSObject.Properties[$Language]) { return $all.$Language }
+    return $all.en
+}
+
+# Bubble text for a session in the active language.
+function Format-Bubble {
+    param($Session, $Strings)
+    switch ([string]$Session.state) {
+        'done' { return @{ title = $Strings.done; detail = [string]$Session.detail } }
+        'attention' {
+            $detail = [string]$Session.detail
+            if ($Session.tool) { $detail = $Strings.permission -f $Session.tool }
+            elseif (-not $detail) { $detail = $Strings.permissionGeneric }
+            return @{ title = $Strings.attention; detail = $detail }
+        }
+        'error' {
+            $known = if ($Session.code) { $Strings.errors.PSObject.Properties[[string]$Session.code] } else { $null }
+            $label = if ($known) { $known.Value } else { [string]$Session.code }
+            $detail = (@($label, $Session.detail) | Where-Object { $_ }) -join ' - '
+            return @{ title = $Strings.error; detail = $detail }
+        }
+    }
+    return $null
 }
 
 # Picks the session the avatar should represent: highest priority, then newest.
