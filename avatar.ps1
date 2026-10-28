@@ -103,6 +103,9 @@ function Draw-Sprite([string]$FrameName, [int]$OffsetX = 0, [int]$OffsetY = 0, [
     $key = "$FrameName|$OffsetX|$OffsetY|" + (($Effects | ForEach-Object { $_ -join ',' }) -join ';')
     if ($key -eq $script:lastDrawn) { return }
     $script:lastDrawn = $key
+    # Fail loudly on typos: a missing name would otherwise draw nothing silently.
+    if (-not $Frames.ContainsKey($FrameName)) { throw "Unknown frame '$FrameName'" }
+    foreach ($effect in $Effects) { if (-not $Overlays.ContainsKey($effect[0])) { throw "Unknown overlay '$($effect[0])'" } }
     $canvas.Children.Clear()
     Add-Pixels $Frames[$FrameName] 0 0 $OffsetX $OffsetY
     foreach ($effect in $Effects) { Add-Pixels $Overlays[$effect[0]] $effect[1] $effect[2] $OffsetX $OffsetY }
