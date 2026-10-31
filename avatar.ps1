@@ -165,19 +165,24 @@ function Update-State {
     $state = 'idle'
     if ($top) { $state = $top.state }
 
-    $canvas.ToolTip = if ($sessions.Count) {
-        ($sessions | ForEach-Object {
-            $line = "$($_.project): $($Strings.states.($_.state))"
-            if ($_.agents) { $line += ' - ' + ($Strings.agents -f $_.agents) }
-            $line
-        }) -join "`n"
-    } else { $Strings.noSessions }
+    $seasonal = Get-SeasonalProp (Get-Date)
+    $script:seasonalProp = if ($seasonal) { $seasonal.prop } else { '' }
+    $lines = @()
+    if ($seasonal -and $seasonal.day) { $lines += $Strings.today -f $Strings.days.($seasonal.day) }
+    if ($sessions.Count) {
+        foreach ($s in $sessions) {
+            $line = "$($s.project): $($Strings.states.($s.state))"
+            if ($s.agents) { $line += ' - ' + ($Strings.agents -f $s.agents) }
+            $lines += $line
+        }
+    }
+    else { $lines += $Strings.noSessions }
+    $canvas.ToolTip = $lines -join "`n"
 
     if ($state -ne $script:current.state) {
         $script:stateSince = $script:tick
         Reset-Activity $state
     }
-    $script:seasonalProp = Get-SeasonalProp (Get-Date)
     $script:current = [pscustomobject]@{
         state      = $state
         session    = $top
@@ -488,7 +493,8 @@ if ($SelfTest) {
             }
         }
         # Extras: every seasonal prop with three minis and each tool icon, then compaction and petting.
-        foreach ($prop in 'pumpkin', 'tree', 'flag') {
+        $props = @($SpecialDays.Values | ForEach-Object { $_[0] }) + 'code', 'gnocchi' | Sort-Object -Unique
+        foreach ($prop in $props) {
             $script:seasonalProp = $prop
             foreach ($tool in 'Edit', 'Bash', 'Read', 'WebFetch', 'Agent') {
                 $script:current = [pscustomobject]@{ state = 'working'; session = $null; activeTool = $tool; agents = 3; compacting = $false }

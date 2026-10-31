@@ -119,13 +119,35 @@ function Get-ToolIcon([string]$Tool) {
     return ''
 }
 
-# Prop standing next to the avatar on special dates ('' = none).
+# Argentine dates, keyed by month*100+day: prop drawn at the feet and the strings.json 'days' key.
+$script:SpecialDays = @{
+    324  = @('scarf', 'memory')        # Dia de la Memoria
+    402  = @('flag', 'malvinas')       # Veteranos y Caidos en Malvinas
+    525  = @('flag', 'may25')          # Revolucion de Mayo
+    620  = @('flag', 'flagDay')        # Dia de la Bandera
+    709  = @('flag', 'independence')   # Dia de la Independencia
+    720  = @('heart', 'friendship')    # Dia del Amigo
+    817  = @('flag', 'sanMartin')      # Paso a la inmortalidad de San Martin
+    911  = @('apple', 'teachers')      # Dia del Maestro
+    921  = @('flower', 'spring')       # Dia de la Primavera y del Estudiante
+    1031 = @('pumpkin', 'halloween')
+    1110 = @('mate', 'tradition')      # Dia de la Tradicion
+    1120 = @('flag', 'sovereignty')    # Dia de la Soberania Nacional
+    1130 = @('mate', 'mateDay')        # Dia Nacional del Mate
+    1218 = @('trophy', 'worldCup')     # Final del Mundial 2022
+    1225 = @('tree', 'christmas')
+}
+
+# What stands next to the avatar today: @{ prop; day } (day = '' for a plain season), or $null.
 function Get-SeasonalProp([datetime]$Date) {
     $md = $Date.Month * 100 + $Date.Day
-    if ($md -ge 1024 -and $md -le 1031) { return 'pumpkin' }   # Halloween week
-    if ($md -ge 1201 -or $md -le 106) { return 'tree' }        # Christmas to Reyes
-    if ($md -in 525, 620, 709) { return 'flag' }               # Argentine national days
-    return ''
+    $special = $script:SpecialDays[$md]
+    if ($special) { return @{ prop = $special[0]; day = $special[1] } }
+    if ($Date.DayOfYear -eq 256) { return @{ prop = 'code'; day = 'programmers' } }   # Dia del Programador
+    if ($Date.Day -eq 29) { return @{ prop = 'gnocchi'; day = 'gnocchi' } }           # noquis del 29
+    if ($md -ge 1024 -and $md -le 1030) { return @{ prop = 'pumpkin'; day = '' } }    # Halloween week
+    if ($md -ge 1208 -or $md -le 106) { return @{ prop = 'tree'; day = '' } }         # arbolito: Dec 8 to Reyes
+    return $null
 }
 
 # Picks the session the avatar should represent: highest priority, then newest.

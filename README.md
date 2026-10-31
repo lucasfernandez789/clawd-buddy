@@ -19,7 +19,23 @@ A tiny pixel companion for Claude Code on Windows. It sits in the bottom-right c
 - **Double click**: pet it. It hops with hearts.
 - **Hover**: list of active sessions, their state and running subagents.
 
-Every running subagent shows up as a mini Clawd hopping around it (up to three). On special dates a prop stands at its feet: a pumpkin in Halloween week, a tree from December to January 6, and the Argentine flag on May 25, June 20 and July 9.
+Every running subagent shows up as a mini Clawd hopping around it (up to three). On special dates a prop stands at its feet, and the hover list names the day:
+
+| Date | Day | Prop |
+|---|---|---|
+| Mar 24 | Día de la Memoria | white scarf |
+| Apr 2, May 25, Jun 20, Jul 9, Aug 17, Nov 20 | Malvinas, Revolución de Mayo, Bandera, Independencia, San Martín, Soberanía | flag |
+| Jul 20 | Día del Amigo | heart |
+| Sep 11 | Día del Maestro | apple |
+| Day 256 (Sep 13, Sep 12 in leap years) | Día del Programador | monitor |
+| Sep 21 | Primavera y Estudiante | flower |
+| Oct 24-31 | Halloween | pumpkin |
+| Nov 10, Nov 30 | Día de la Tradición, Día del Mate | mate |
+| Dec 18 | 2022 World Cup final | trophy |
+| Dec 8 to Jan 6 | Christmas (the tree goes up on Dec 8) | tree |
+| Every 29th | Ñoquis del 29 | gnocchi |
+
+Dates live in `$SpecialDays` in `lib/state.ps1` and their names in `lib/strings.json`.
 
 With several sessions open, the avatar shows the most urgent one: error, then needs you, then done, then working. The bubble names the project, and the hover list shows every session. Clicking brings the terminal window forward; picking the exact Windows Terminal tab is not possible from outside, so the project name tells you which tab it is.
 

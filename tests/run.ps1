@@ -79,12 +79,24 @@ Assert ($b.title -eq 'Listo') 'done bubble without duration keeps the plain titl
 
 Assert ((Get-ToolIcon 'Edit') -eq 'pencil' -and (Get-ToolIcon 'Bash') -eq 'term' -and (Get-ToolIcon 'Grep') -eq 'lens' -and (Get-ToolIcon 'WebSearch') -eq 'globe') 'tool families map to icons'
 Assert ((Get-ToolIcon 'Agent') -eq '' -and (Get-ToolIcon '') -eq '') 'other tools have no icon'
-foreach ($icon in 'pencil', 'term', 'lens', 'globe', 'mini', 'pumpkin', 'tree', 'flag', 'press1', 'press2', 'press3') {
+foreach ($icon in 'pencil', 'term', 'lens', 'globe', 'mini', 'press1', 'press2', 'press3', 'code', 'gnocchi', 'pumpkin', 'tree') {
     Assert ($Overlays.ContainsKey($icon)) "overlay '$icon' exists"
 }
-Assert ((Get-SeasonalProp ([datetime]'2026-10-31')) -eq 'pumpkin' -and (Get-SeasonalProp ([datetime]'2026-10-23')) -eq '') 'pumpkin only in Halloween week'
-Assert ((Get-SeasonalProp ([datetime]'2026-12-24')) -eq 'tree' -and (Get-SeasonalProp ([datetime]'2027-01-06')) -eq 'tree' -and (Get-SeasonalProp ([datetime]'2027-01-07')) -eq '') 'tree from December to Reyes'
-Assert ((Get-SeasonalProp ([datetime]'2026-07-09')) -eq 'flag' -and (Get-SeasonalProp ([datetime]'2026-03-15')) -eq '') 'flag on national days, nothing on a plain day'
+foreach ($entry in $SpecialDays.GetEnumerator()) {
+    $prop, $day = $entry.Value
+    Assert ($Overlays.ContainsKey($prop) -and $es.days.PSObject.Properties[$day]) "special day $($entry.Key) has a drawing ('$prop') and a name ('$day')"
+}
+$at = { param($d) Get-SeasonalProp ([datetime]$d) }
+$p = & $at '2026-07-09'; Assert ($p.prop -eq 'flag' -and $p.day -eq 'independence') '9 de julio shows the flag'
+$p = & $at '2026-09-13'; Assert ($p.prop -eq 'code' -and $p.day -eq 'programmers') 'Programmers Day is day 256 (Sept 13)'
+$p = & $at '2028-09-12'; Assert ($p.prop -eq 'code') 'Programmers Day moves to Sept 12 in leap years'
+$p = & $at '2026-03-29'; Assert ($p.prop -eq 'gnocchi') 'the 29th serves gnocchi'
+$p = & $at '2026-10-29'; Assert ($p.prop -eq 'gnocchi') 'a fixed or monthly date wins over the season'
+$p = & $at '2026-10-27'; Assert ($p.prop -eq 'pumpkin' -and $p.day -eq '') 'Halloween week shows the pumpkin with no day name'
+$p = & $at '2026-12-08'; Assert ($p.prop -eq 'tree') 'the tree goes up on December 8'
+$p = & $at '2026-12-07'; Assert ($null -eq $p) 'no tree before December 8'
+$p = & $at '2027-01-06'; Assert ($p.prop -eq 'tree') 'the tree stays until Reyes'
+$p = & $at '2026-03-15'; Assert ($null -eq $p) 'nothing on a plain day'
 
 # Effective state.
 $sess = { param($st, $ts) [pscustomobject]@{ state = $st; ts = $ts } }

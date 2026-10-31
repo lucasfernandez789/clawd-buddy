@@ -63,6 +63,13 @@
     "pumpkin": ["..Y.", "AEAE", "AAAA", "AEEA"],
     "tree": [".V.", "VVV", "VVV", ".T."],
     "flag": ["TQQQ", "TPZP", "TQQQ", "T..."],
+    "scarf": ["WWWW", ".WW.", ".W.."],
+    "apple": [".TV", "RRR", "RRR", ".R."],
+    "flower": [".U.", "UZU", ".U.", ".V.", "VV."],
+    "mate": ["..M.", ".TMT", "TYYT", "TTTT", ".TT."],
+    "trophy": ["ZZZZ", "ZZZZ", ".ZZ.", ".AA."],
+    "code": ["LLLL", "LNNL", "LLLL", ".GG."],
+    "gnocchi": [".ZR.", "ZRZZ", "WWWW"],
     "press1": ["MMMMMM"],
     "press2": ["WWWWWW", "MMMMMM"],
     "press3": ["WWWWWW", "MMMMMM", "WWWWWW", "MMMMMM"]
