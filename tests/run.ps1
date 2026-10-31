@@ -64,6 +64,28 @@ $s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'SessionStart' }) ([pscu
 Assert ($null -eq $s) 'repeated SessionStart keeps the live state'
 Assert ((Get-FirstLine ('a' * 200)).Length -eq 90) 'long detail is truncated'
 
+# Turn duration: 'started' survives a permission prompt and Stop reports the elapsed time.
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'UserPromptSubmit' }) $null 1000
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'PermissionRequest'; tool_name = 'Bash' }) ([pscustomobject]$s) 5000
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Stop'; last_assistant_message = 'ok' }) ([pscustomobject]$s) 193000
+Assert ($s.took -eq 192000) 'Stop measures the turn from UserPromptSubmit, across a permission prompt'
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Stop' }) $null 100
+Assert ($s.took -eq 0) 'Stop without a known start has no duration'
+Assert ((Format-Duration 42000) -eq '42s' -and (Format-Duration 192000) -eq '3m 12s' -and (Format-Duration 3900000) -eq '1h 5m') 'durations read as s, m s, h m'
+$b = Format-Bubble ([pscustomobject]@{ state = 'done'; took = 192000; detail = 'x' }) $es
+Assert ($b.title -eq 'Listo en 3m 12s') 'done bubble shows the duration'
+$b = Format-Bubble ([pscustomobject]@{ state = 'done'; took = 0; detail = 'x' }) $es
+Assert ($b.title -eq 'Listo') 'done bubble without duration keeps the plain title'
+
+Assert ((Get-ToolIcon 'Edit') -eq 'pencil' -and (Get-ToolIcon 'Bash') -eq 'term' -and (Get-ToolIcon 'Grep') -eq 'lens' -and (Get-ToolIcon 'WebSearch') -eq 'globe') 'tool families map to icons'
+Assert ((Get-ToolIcon 'Agent') -eq '' -and (Get-ToolIcon '') -eq '') 'other tools have no icon'
+foreach ($icon in 'pencil', 'term', 'lens', 'globe', 'mini', 'pumpkin', 'tree', 'flag', 'press1', 'press2', 'press3') {
+    Assert ($Overlays.ContainsKey($icon)) "overlay '$icon' exists"
+}
+Assert ((Get-SeasonalProp ([datetime]'2026-10-31')) -eq 'pumpkin' -and (Get-SeasonalProp ([datetime]'2026-10-23')) -eq '') 'pumpkin only in Halloween week'
+Assert ((Get-SeasonalProp ([datetime]'2026-12-24')) -eq 'tree' -and (Get-SeasonalProp ([datetime]'2027-01-06')) -eq 'tree' -and (Get-SeasonalProp ([datetime]'2027-01-07')) -eq '') 'tree from December to Reyes'
+Assert ((Get-SeasonalProp ([datetime]'2026-07-09')) -eq 'flag' -and (Get-SeasonalProp ([datetime]'2026-03-15')) -eq '') 'flag on national days, nothing on a plain day'
+
 # Effective state.
 $sess = { param($st, $ts) [pscustomobject]@{ state = $st; ts = $ts } }
 Assert ((Get-EffectiveState (& $sess 'done' 100) 0 200 150) -eq 'idle') 'dismissed alert becomes idle'
@@ -90,7 +112,7 @@ try {
     }
     $cfg = Read-Settings $settingsPath
     Assert (@($cfg.hooks.UserPromptSubmit).Count -eq 2) 'install twice adds one group next to the foreign hook'
-    Assert (@($cfg.hooks.PSObject.Properties).Count -eq 7) 'all seven events registered'
+    Assert (@($cfg.hooks.PSObject.Properties).Count -eq 12) 'all twelve events registered'
     Assert ($cfg.hooks.UserPromptSubmit[0].hooks[0].command -eq 'codegraph.cmd prompt-hook') 'foreign hook preserved first'
     Assert ($cfg.hooks.Stop[0].hooks[0].async -eq $true) 'buddy hooks are async'
     $text = [IO.File]::ReadAllText($settingsPath)
@@ -109,8 +131,23 @@ try {
     $file = Join-Path $stateDir 'sessions\abc-1.json'
     Assert ($LASTEXITCODE -eq 0 -and -not $output) 'hook exits 0 and prints nothing'
     Assert ((Test-Path $file) -and ((Get-Content $file -Raw | ConvertFrom-Json).state -eq 'working')) 'hook writes the session state'
-    '{"session_id":"abc-1","hook_event_name":"SessionEnd"}' | powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hook -StateDir $stateDir
+    $side = Join-Path $stateDir 'sessions\abc-1'
+    $runHook = { param($json) $json | powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hook -StateDir $stateDir }
+    & $runHook '{"session_id":"abc-1","hook_event_name":"PreToolUse","tool_name":"Edit"}'
+    Assert ((Get-Content "$side.tool" -Raw) -eq 'Edit') 'PreToolUse records the running tool'
+    Assert ((Get-Content $file -Raw | ConvertFrom-Json).state -eq 'working') 'PreToolUse leaves the session state alone'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"SubagentStart","agent_id":"ag-1"}'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"SubagentStart","agent_id":"ag-2"}'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"SubagentStop","agent_id":"ag-1"}'
+    Assert ((@(Get-ChildItem "$side.agents" -File).Name -join ',') -eq 'ag-2') 'subagent markers follow start and stop'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"PreCompact"}'
+    Assert (Test-Path "$side.compact") 'PreCompact marks the session as compacting'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"PostCompact"}'
+    Assert (-not (Test-Path "$side.compact")) 'PostCompact clears the mark'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"PreCompact"}'
+    & $runHook '{"session_id":"abc-1","hook_event_name":"SessionEnd"}'
     Assert (-not (Test-Path $file)) 'SessionEnd removes the session'
+    Assert (-not (Test-Path "$side.tool") -and -not (Test-Path "$side.agents") -and -not (Test-Path "$side.compact")) 'SessionEnd removes the side files'
     'not json' | powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hook -StateDir $stateDir
     Assert ($LASTEXITCODE -eq 0) 'bad input still exits 0'
 

@@ -9,6 +9,11 @@ $script:BuddyEvents = [ordered]@{
     StopFailure       = $null
     PermissionRequest = $null
     Notification      = 'permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input'
+    PreToolUse        = $null
+    SubagentStart     = $null
+    SubagentStop      = $null
+    PreCompact        = $null
+    PostCompact       = $null
 }
 
 function Read-Settings([string]$Path) {

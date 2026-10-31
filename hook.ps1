@@ -42,9 +42,30 @@ try {
     New-Item -ItemType Directory -Force -Path $sessions | Out-Null
     $file = Join-Path $sessions "$id.json"
 
-    if ($hookEvent.hook_event_name -eq 'SessionEnd') {
-        Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue
-        exit 0
+    # Tool, subagent and compaction activity live in side files: these hooks run in
+    # parallel, and a read-modify-write of the main file would lose state updates.
+    $side = Join-Path $sessions $id
+    $agent = ([string]$hookEvent.agent_id) -replace '[^\w-]', ''
+    switch ([string]$hookEvent.hook_event_name) {
+        'PreToolUse' {
+            [IO.File]::WriteAllText("$side.tool", ([string]$hookEvent.tool_name -replace '[^\w-]', ''))
+            exit 0
+        }
+        'SubagentStart' {
+            if ($agent) { New-Item -ItemType File -Force -Path (Join-Path "$side.agents" $agent) | Out-Null }
+            exit 0
+        }
+        'SubagentStop' {
+            if ($agent) { Remove-Item -LiteralPath (Join-Path "$side.agents" $agent) -ErrorAction SilentlyContinue }
+            exit 0
+        }
+        'PreCompact' { [IO.File]::WriteAllText("$side.compact", ''); exit 0 }
+        'PostCompact' { Remove-Item -LiteralPath "$side.compact" -ErrorAction SilentlyContinue; exit 0 }
+        'SessionEnd' {
+            Remove-Item -LiteralPath $file, "$side.tool", "$side.compact" -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath "$side.agents" -Recurse -Force -ErrorAction SilentlyContinue
+            exit 0
+        }
     }
 
     $previous = $null

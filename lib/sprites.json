@@ -55,7 +55,17 @@
     "what": ["AA.", "..A", ".A.", "...", ".A."],
     "yoyo1": ["M.", "BB", "BB"],
     "yoyo2": ["M.", "M.", "M.", "BB", "BB"],
-    "zzz": ["QQQ", "..Q", ".Q.", "Q..", "QQQ"]
+    "zzz": ["QQQ", "..Q", ".Q.", "Q..", "QQQ"],
+    "pencil": ["...U", "..A.", ".A..", "E..."],
+    "term": ["LLLLL", "LVLLL", "LLVLL", "LVLVV", "LLLLL"],
+    "globe": [".BB.", "BVVB", "BBVB", ".BB."],
+    "mini": ["OOO", "EOE", "D.D"],
+    "pumpkin": ["..Y.", "AEAE", "AAAA", "AEEA"],
+    "tree": [".V.", "VVV", "VVV", ".T."],
+    "flag": ["TQQQ", "TPZP", "TQQQ", "T..."],
+    "press1": ["MMMMMM"],
+    "press2": ["WWWWWW", "MMMMMM"],
+    "press3": ["WWWWWW", "MMMMMM", "WWWWWW", "MMMMMM"]
   },
   "frames": {
     "attn1": [

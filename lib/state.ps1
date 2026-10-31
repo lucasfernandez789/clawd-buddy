@@ -23,7 +23,9 @@ function ConvertTo-SessionState {
 
     $project = ''
     if ($HookEvent.cwd) { $project = Split-Path -Leaf ([string]$HookEvent.cwd) }
-    $base = @{ project = $project; transcript = [string]$HookEvent.transcript_path; ts = $Now }
+    # 'started' rides along every state so Stop can tell how long the turn took.
+    $started = if ($Previous -and $Previous.started) { [long]$Previous.started } else { 0 }
+    $base = @{ project = $project; transcript = [string]$HookEvent.transcript_path; ts = $Now; started = $started }
 
     switch ([string]$HookEvent.hook_event_name) {
         # SessionStart repeats on resume/clear/compact: never reset a live session.
@@ -31,8 +33,11 @@ function ConvertTo-SessionState {
             if ($Previous) { return $null }
             return $base + @{ state = 'idle'; detail = '' }
         }
-        'UserPromptSubmit' { return $base + @{ state = 'working'; detail = '' } }
-        'Stop' { return $base + @{ state = 'done'; detail = Get-FirstLine $HookEvent.last_assistant_message } }
+        'UserPromptSubmit' { $base.started = $Now; return $base + @{ state = 'working'; detail = '' } }
+        'Stop' {
+            $took = if ($started) { $Now - $started } else { 0 }
+            return $base + @{ state = 'done'; detail = Get-FirstLine $HookEvent.last_assistant_message; took = $took }
+        }
         # The avatar localizes 'code' and 'tool'; 'detail' keeps the raw text.
         'StopFailure' {
             return $base + @{ state = 'error'; code = [string]$HookEvent.error; detail = [string]$HookEvent.error_details }
@@ -76,7 +81,10 @@ function Get-Strings {
 function Format-Bubble {
     param($Session, $Strings)
     switch ([string]$Session.state) {
-        'done' { return @{ title = $Strings.done; detail = [string]$Session.detail } }
+        'done' {
+            $title = if ([long]$Session.took -gt 0) { $Strings.doneIn -f (Format-Duration ([long]$Session.took)) } else { $Strings.done }
+            return @{ title = $title; detail = [string]$Session.detail }
+        }
         'attention' {
             $detail = [string]$Session.detail
             if ($Session.tool) { $detail = $Strings.permission -f $Session.tool }
@@ -91,6 +99,33 @@ function Format-Bubble {
         }
     }
     return $null
+}
+
+function Format-Duration([long]$Ms) {
+    $s = [long][math]::Floor($Ms / 1000)
+    if ($s -lt 60) { return "${s}s" }
+    if ($s -lt 3600) { return '{0}m {1}s' -f [math]::Floor($s / 60), ($s % 60) }
+    return '{0}h {1}m' -f [math]::Floor($s / 3600), [math]::Floor(($s % 3600) / 60)
+}
+
+# Overlay drawn above the head while a tool runs, by tool family ('' = none).
+function Get-ToolIcon([string]$Tool) {
+    switch -Regex ($Tool) {
+        '^(Edit|Write|MultiEdit|NotebookEdit)$' { return 'pencil' }
+        '^(Bash|PowerShell)$' { return 'term' }
+        '^(Read|Grep|Glob|LSP)$' { return 'lens' }
+        '^(WebFetch|WebSearch)$' { return 'globe' }
+    }
+    return ''
+}
+
+# Prop standing next to the avatar on special dates ('' = none).
+function Get-SeasonalProp([datetime]$Date) {
+    $md = $Date.Month * 100 + $Date.Day
+    if ($md -ge 1024 -and $md -le 1031) { return 'pumpkin' }   # Halloween week
+    if ($md -ge 1201 -or $md -le 106) { return 'tree' }        # Christmas to Reyes
+    if ($md -in 525, 620, 709) { return 'flag' }               # Argentine national days
+    return ''
 }
 
 # Picks the session the avatar should represent: highest priority, then newest.

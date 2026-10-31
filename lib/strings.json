@@ -1,6 +1,8 @@
 {
   "en": {
     "done": "Done",
+    "doneIn": "Done in {0}",
+    "agents": "{0} subagent(s)",
     "attention": "Needs you",
     "error": "Error",
     "permission": "Needs permission: {0}",
@@ -22,6 +24,8 @@
   },
   "es": {
     "done": "Listo",
+    "doneIn": "Listo en {0}",
+    "agents": "{0} subagente(s)",
     "attention": "Te necesita",
     "error": "Error",
     "permission": "Pide permiso: {0}",

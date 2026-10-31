@@ -75,7 +75,11 @@ foreach ($key in $Palette.Keys) {
 $script:muted = $false
 $script:dismissedBefore = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()  # old alerts stay quiet on startup
 $script:alerted = @{}
-$script:current = [pscustomobject]@{ state = 'idle'; session = $null }
+$script:current = [pscustomobject]@{ state = 'idle'; session = $null; activeTool = ''; agents = 0; compacting = $false }
+$script:extras = @()
+$script:seasonalProp = ''
+$script:petTick = -1000
+$script:lastClick = 0
 $script:tick = 0
 $script:reactionTick = 0
 $script:stateSince = 0
@@ -100,6 +104,7 @@ function Add-Pixels([string[]]$Rows, [int]$GridX, [int]$GridY, [int]$OffsetX, [i
 
 # Effects: array of @(overlayName, gridX, gridY); redraws only when something changed.
 function Draw-Sprite([string]$FrameName, [int]$OffsetX = 0, [int]$OffsetY = 0, [object[]]$Effects = @()) {
+    $Effects = @($Effects) + $script:extras
     $key = "$FrameName|$OffsetX|$OffsetY|" + (($Effects | ForEach-Object { $_ -join ',' }) -join ';')
     if ($key -eq $script:lastDrawn) { return }
     $script:lastDrawn = $key
@@ -129,8 +134,20 @@ function Read-Sessions {
         if ($session.transcript -and (Test-Path -LiteralPath $session.transcript)) {
             $mtime = Get-UnixMs (Get-Item -LiteralPath $session.transcript).LastWriteTimeUtc
         }
+        $side = Join-Path $SessionsDir $file.BaseName
+        $activeTool = ''
+        $toolFile = Get-Item -LiteralPath "$side.tool" -ErrorAction SilentlyContinue
+        if ($toolFile -and $now - (Get-UnixMs $toolFile.LastWriteTimeUtc) -lt 60000) { $activeTool = [IO.File]::ReadAllText($toolFile.FullName) }
+        # A killed subagent never sends SubagentStop: markers expire after 30 minutes.
+        $agents = @(Get-ChildItem -LiteralPath "$side.agents" -File -ErrorAction SilentlyContinue |
+            Where-Object { $now - (Get-UnixMs $_.LastWriteTimeUtc) -lt 30 * 60 * 1000 }).Count
+        $compactFile = Get-Item -LiteralPath "$side.compact" -ErrorAction SilentlyContinue
         [pscustomobject]@{
-            id      = $file.BaseName
+            id         = $file.BaseName
+            activeTool = $activeTool
+            agents     = $agents
+            compacting = [bool]($compactFile -and $now - (Get-UnixMs $compactFile.LastWriteTimeUtc) -lt 5 * 60 * 1000)
+            took       = [long]$session.took
             state   = Get-EffectiveState -Session $session -TranscriptMtime $mtime -Now $now -DismissedBefore $script:dismissedBefore
             ts      = [long]$session.ts
             project = [string]$session.project
@@ -149,14 +166,25 @@ function Update-State {
     if ($top) { $state = $top.state }
 
     $canvas.ToolTip = if ($sessions.Count) {
-        ($sessions | ForEach-Object { "$($_.project): $($Strings.states.($_.state))" }) -join "`n"
+        ($sessions | ForEach-Object {
+            $line = "$($_.project): $($Strings.states.($_.state))"
+            if ($_.agents) { $line += ' - ' + ($Strings.agents -f $_.agents) }
+            $line
+        }) -join "`n"
     } else { $Strings.noSessions }
 
     if ($state -ne $script:current.state) {
         $script:stateSince = $script:tick
         Reset-Activity $state
     }
-    $script:current = [pscustomobject]@{ state = $state; session = $top }
+    $script:seasonalProp = Get-SeasonalProp (Get-Date)
+    $script:current = [pscustomobject]@{
+        state      = $state
+        session    = $top
+        activeTool = $(if ($top) { $top.activeTool } else { '' })
+        agents     = $(if ($top) { $top.agents } else { 0 })
+        compacting = [bool]($top -and $top.compacting)
+    }
 
     if (-not $Styles.ContainsKey($state)) { $bubble.Visibility = 'Collapsed'; return }
 
@@ -283,14 +311,54 @@ function Update-Activity([string]$State) {
     return $true
 }
 
+# Things drawn on top of every frame: a seasonal prop and one mini Clawd per running subagent.
+$MiniSpots = @(@(13, 8), @(13, 4), @(-1, 3))
+function Update-Extras {
+    $extras = @()
+    if ($script:seasonalProp) { $extras += , @($script:seasonalProp, -1, (11 - $Overlays[$script:seasonalProp].Count)) }
+    $count = [math]::Min([int]$script:current.agents, $MiniSpots.Count)
+    for ($i = 0; $i -lt $count; $i++) {
+        $hop = [math]::Floor($script:tick / 3 + $i) % 2
+        $extras += , @('mini', $MiniSpots[$i][0], ($MiniSpots[$i][1] - $hop))
+    }
+    $script:extras = $extras
+}
+
 function Update-Animation {
     $t = $script:tick
     $sinceReaction = $t - $script:reactionTick
     $sinceState = $t - $script:stateSince
+    Update-Extras
+
+    # Double click: hops with hearts, whatever the state.
+    $sincePet = $t - $script:petTick
+    if ($sincePet -lt 25) {
+        $hop = @(0, -4, -8, -4, 0)[[math]::Min($sincePet, 4)]
+        Draw-Sprite 'done' 0 $hop @(@('heart', 1, (-2 - [math]::Floor($sincePet / 3) % 4)), @('heart', 12, (-3 - [math]::Floor(($sincePet + 5) / 3) % 3)))
+        return
+    }
+
+    # Compacting the conversation: squashes a stack of papers over the head.
+    if ($script:current.compacting -and $script:current.state -in 'idle', 'working') {
+        $phase = [math]::Floor($t / 4) % 4
+        $stack = @('press3', 'press2', 'press1', 'press1')[$phase]
+        $effects = @(, @($stack, 5, (0 - $Overlays[$stack].Count)))
+        if ($phase -eq 3) { $effects += , @('sparkle', 12, -4) }
+        Draw-Sprite 'plain' 0 $(if ($phase -ge 2) { 3 } else { 0 }) $effects
+        return
+    }
+
     switch ($script:current.state) {
         'working' {
             if (Update-Activity 'working') { return }
             $frame = if ([math]::Floor($t / 2) % 2) { 'work1' } else { 'work2' }
+            $icon = Get-ToolIcon $script:current.activeTool
+            if ($icon) {
+                # The current tool floats over the head, bobbing.
+                $bob = [math]::Floor($t / 4) % 2
+                Draw-Sprite $frame 0 0 @(, @($icon, 11, (0 - $Overlays[$icon].Count - $bob)))
+                return
+            }
             # Parenthesize math inside arrays: the comma binds tighter than + and -.
             Draw-Sprite $frame 0 0 @(, @('dot', (12 + [math]::Floor($t / 4) % 3), -1))
         }
@@ -357,6 +425,10 @@ function Set-Anchor {
 }
 
 $window.Add_MouseLeftButtonDown({
+    # Double click pets him. Timed by hand: DragMove on the first click resets WPF's ClickCount.
+    $clickAt = [Environment]::TickCount
+    if ($clickAt - $script:lastClick -lt 450) { $script:petTick = $script:tick; $script:lastClick = 0; return }
+    $script:lastClick = $clickAt
     $left = $window.Left; $top = $window.Top
     $script:dragging = $true
     try { $window.DragMove() } catch { }
@@ -415,6 +487,19 @@ if ($SelfTest) {
                 for ($i = 0; $i -lt 90; $i++) { Update-Animation; $script:tick++ }
             }
         }
+        # Extras: every seasonal prop with three minis and each tool icon, then compaction and petting.
+        foreach ($prop in 'pumpkin', 'tree', 'flag') {
+            $script:seasonalProp = $prop
+            foreach ($tool in 'Edit', 'Bash', 'Read', 'WebFetch', 'Agent') {
+                $script:current = [pscustomobject]@{ state = 'working'; session = $null; activeTool = $tool; agents = 3; compacting = $false }
+                $script:activity = $null; $script:nextActivity = $script:tick + 1000
+                for ($i = 0; $i -lt 8; $i++) { Update-Animation; $script:tick++ }
+            }
+        }
+        $script:current = [pscustomobject]@{ state = 'working'; session = $null; activeTool = ''; agents = 0; compacting = $true }
+        for ($i = 0; $i -lt 20; $i++) { Update-Animation; $script:tick++ }
+        $script:petTick = $script:tick
+        for ($i = 0; $i -lt 30; $i++) { Update-Animation; $script:tick++ }
         Write-Output 'selftest ok'
         exit 0
     }
