@@ -1,4 +1,4 @@
-# Pure state logic shared by hook.ps1 and avatar.ps1 (no I/O, so it is testable).
+# State logic shared by hook.ps1 and avatar.ps1. Pure (so it is testable), except Remove-SessionFiles.
 # Keep this file ASCII-only: Windows PowerShell 5.1 misreads BOM-less UTF-8.
 
 $script:StatePriority = @{ idle = 0; working = 1; done = 2; attention = 3; error = 4 }
@@ -14,6 +14,20 @@ function Get-FirstLine {
     if (-not $line) { return '' }
     if ($line.Length -gt $Max) { return $line.Substring(0, $Max - 3) + '...' }
     return $line
+}
+
+# How the avatar celebrates a finished turn: 'question' (the answer ends asking something),
+# 'trouble' (it says it could not finish), 'big' (10+ minutes), 'quick' (under 15 s) or ''.
+# Patterns are narrow and accent-free on purpose: "fixed the error" must not read as trouble.
+function Get-DoneMood {
+    param([string]$Message, [long]$Took)
+    $lines = @($Message -split "`r?`n" | ForEach-Object { ($_ -replace '[#*`>_]', '').Trim() } | Where-Object { $_ })
+    if ($lines.Count -and $lines[-1].EndsWith('?')) { return 'question' }
+    # Only the opening line counts: a caveat further down a successful answer is not trouble.
+    if ($lines.Count -and $lines[0] -match "\b(couldn.t|could not|unable to|still fail|no pude|no se pudo|no logr|siguen? fallando)") { return 'trouble' }
+    if ($Took -ge 10 * 60 * 1000) { return 'big' }
+    if ($Took -gt 0 -and $Took -lt 15000) { return 'quick' }
+    return ''
 }
 
 # Maps one hook payload to the session's next state. Returns $null when the
@@ -36,7 +50,8 @@ function ConvertTo-SessionState {
         'UserPromptSubmit' { $base.started = $Now; return $base + @{ state = 'working'; detail = '' } }
         'Stop' {
             $took = if ($started) { $Now - $started } else { 0 }
-            return $base + @{ state = 'done'; detail = Get-FirstLine $HookEvent.last_assistant_message; took = $took }
+            $message = [string]$HookEvent.last_assistant_message
+            return $base + @{ state = 'done'; detail = Get-FirstLine $message; took = $took; mood = Get-DoneMood $message $took }
         }
         # The avatar localizes 'code' and 'tool'; 'detail' keeps the raw text.
         'StopFailure' {
@@ -67,6 +82,28 @@ function Get-EffectiveState {
     # A closed terminal sends no SessionEnd, so a silent "working" session goes stale.
     if ($state -eq 'working' -and $Now - [math]::Max($ts, $TranscriptMtime) -gt 15 * 60 * 1000) { return 'idle' }
     return $state
+}
+
+# A closed terminal sends no SessionEnd: a session silent for a day is forgotten.
+# shortcut: a prompt left pending for over 24 h is dropped too; exempt 'attention' if that bites.
+function Test-SessionAbandoned {
+    param($Session, [long]$TranscriptMtime, [long]$Now)
+    return $Now - [math]::Max([long]$Session.ts, $TranscriptMtime) -gt 24 * 60 * 60 * 1000
+}
+
+# $Side is the session path without extension: the state file and its side files hang off it.
+function Remove-SessionFiles([string]$Side) {
+    Remove-Item -LiteralPath "$Side.json", "$Side.tool", "$Side.compact" -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath "$Side.agents" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# Saved bottom-right corner, or $null when it is missing or off the current screens (monitor unplugged).
+function Get-SavedAnchor {
+    param($Prefs, [double]$Left, [double]$Top, [double]$Width, [double]$Height)
+    if (-not $Prefs -or $null -eq $Prefs.right -or $null -eq $Prefs.bottom) { return $null }
+    $right = [double]$Prefs.right; $bottom = [double]$Prefs.bottom
+    if ($right -lt $Left + 60 -or $right -gt $Left + $Width -or $bottom -lt $Top + 60 -or $bottom -gt $Top + $Height) { return $null }
+    return @{ right = $right; bottom = $bottom }
 }
 
 # Loads UI strings for a language, falling back to English. Read as UTF-8 explicitly.

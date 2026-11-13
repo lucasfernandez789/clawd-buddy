@@ -72,7 +72,10 @@
     "gnocchi": [".ZR.", "ZRZZ", "WWWW"],
     "press1": ["MMMMMM"],
     "press2": ["WWWWWW", "MMMMMM"],
-    "press3": ["WWWWWW", "MMMMMM", "WWWWWW", "MMMMMM"]
+    "press3": ["WWWWWW", "MMMMMM", "WWWWWW", "MMMMMM"],
+    "balloon": [".RR.", "RRRR", "RRRR", ".RR.", ".G..", ".G..", "G..."],
+    "bfly1": ["UU.UU", "UUZUU", "U...U"],
+    "bfly2": [".U.U.", ".UZU.", ".U.U."]
   },
   "frames": {
     "attn1": [
@@ -96,6 +99,19 @@
       "...OOEEOOEEOO...",
       "...OOOOOOOOOO...",
       "..OOOOOOOOOOO...",
+      "...OOOOOOOOOO...",
+      "...OOOOOOOOOO...",
+      "....DD....DD....",
+      "................"
+    ],
+    "sad": [
+      "................",
+      "...OOOOOOOOOO...",
+      "...OOOOOOOOOO...",
+      "...OOOOOOOOOO...",
+      "...OODDOODDOO...",
+      "...OOEEOOEEOO...",
+      "..OOOOOOOOOOOO..",
       "...OOOOOOOOOO...",
       "...OOOOOOOOOO...",
       "....DD....DD....",

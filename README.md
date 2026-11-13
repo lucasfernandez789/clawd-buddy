@@ -6,18 +6,18 @@ A tiny pixel companion for Claude Code on Windows. It sits in the bottom-right c
 
 | State | When | What it does |
 |---|---|---|
-| Idle | No session needs you | Reads a book, blinks and turns pages. Every 20-45 s it does something at random: drinks mate, listens to music, plays with a yo-yo, stretches, looks around, blows bubble gum, juggles, plays a handheld console, gets a visit from a cat, dances or meditates. After 10 idle minutes it falls asleep |
-| Working | You sent a prompt | Types on a laptop with the running tool floating over its head: a pencil for edits, a terminal for shell commands, a magnifier for reads and searches, a globe for web requests. Every 6-15 s it has an idea (light bulb), grumbles, scratches its head, sweats, types at full speed, looks up thinking, squashes a bug crawling on the laptop, searches with a magnifier, celebrates, facepalms, watches a loading bar or takes a mate break |
+| Idle | No session needs you | Reads a book, blinks and turns pages. Every 20-45 s it does something at random: drinks mate, listens to music, plays with a yo-yo, stretches, looks around, blows bubble gum, juggles, plays a handheld console, gets a visit from a cat, dances, meditates, waves, holds a balloon or watches a butterfly. After 10 idle minutes it falls asleep |
+| Working | You sent a prompt | Types on a laptop with the running tool floating over its head: a pencil for edits, a terminal for shell commands, a magnifier for reads and searches, a globe for web requests. Every 6-15 s it has an idea (light bulb), grumbles, scratches its head, sweats, types at full speed, looks up thinking, squashes a bug crawling on the laptop, searches with a magnifier, celebrates, facepalms, watches a loading bar, takes a mate break or gets in the zone with music |
 | Compacting | The conversation is being compacted | Squashes a stack of papers on its head |
-| Done | Claude finished its turn | Jumps with confetti, shows a green bubble with how long the turn took and the first line of the answer, chimes |
+| Done | Claude finished its turn | Jumps with confetti, shows a green bubble with how long the turn took and the first line of the answer, chimes. The celebration follows the answer: a question mark when it ends asking you something, a worried face when it says it could not finish, a trophy after a turn of 10 minutes or more, a small hop with a check mark under 15 seconds |
 | Needs you | Permission or input required | Waves under a blinking "!", shows an amber bubble, chimes |
 | Error | The turn failed (rate limit, API error...) | Shakes with X eyes and smoke, red bubble, alert sound |
 
 - **Left click**: dismiss the bubble and jump to the terminal window of that session.
-- **Drag**: move it. It keeps its bottom-right corner when the bubble appears.
-- **Right click**: mute sounds or quit.
+- **Drag**: move it. It keeps its bottom-right corner when the bubble appears, and remembers where you left it.
+- **Right click**: mute sounds or quit. Mute is remembered too.
 - **Double click**: pet it. It hops with hearts.
-- **Hover**: list of active sessions, their state and running subagents.
+- **Hover**: list of active sessions, their state, how long a working one has been running and its subagents.
 
 Every running subagent shows up as a mini Clawd hopping around it (up to three). On special dates a prop stands at its feet, and the hover list names the day:
 
@@ -78,7 +78,8 @@ Removes only the `clawd-buddy` hooks and stops the avatar.
 - `avatar.ps1` is a transparent WPF window that polls those files and animates the sprite.
 - `PermissionRequest` signals "needs you" immediately; `Notification` is only a fallback because it arrives late and repeats idle reminders.
 - No hook fires when you grant a permission, so the avatar treats new transcript output as "working again".
-- A closed terminal sends no `SessionEnd`, so a working session with no activity for 15 minutes goes back to idle.
+- A closed terminal sends no `SessionEnd`, so a working session with no activity for 15 minutes goes back to idle, and a session silent for 24 hours is dropped from the list.
+- Position and mute live in `%LOCALAPPDATA%\clawd-buddy\avatar.json`. A saved position that falls outside the current screens is ignored.
 - `PreToolUse` starts one PowerShell process per tool call. It is async, so Claude Code never waits for it, but it costs a little CPU on busy sessions. To drop the tool icons, remove the `clawd-buddy` entry under `PreToolUse` in `settings.json`.
 - Tool, subagent and compaction activity go to side files next to the session file (`<id>.tool`, `<id>.agents\`, `<id>.compact`). Those hooks run in parallel, so sharing the main file would lose updates. Subagent marks expire after 30 minutes in case a `SubagentStop` never arrives.
 

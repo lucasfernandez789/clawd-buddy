@@ -72,7 +72,9 @@ foreach ($key in $Palette.Keys) {
     $brushes[$key] = $brush
 }
 
-$script:muted = $false
+$PrefsFile = Join-Path $StateDir 'avatar.json'
+try { $prefs = [IO.File]::ReadAllText($PrefsFile) | ConvertFrom-Json } catch { $prefs = $null }
+$script:muted = [bool]($prefs -and $prefs.muted)
 $script:dismissedBefore = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()  # old alerts stay quiet on startup
 $script:alerted = @{}
 $script:current = [pscustomobject]@{ state = 'idle'; session = $null; activeTool = ''; agents = 0; compacting = $false }
@@ -87,6 +89,14 @@ $script:lastDrawn = ''
 $workArea = [System.Windows.SystemParameters]::WorkArea
 $script:anchorRight = $workArea.Right - 16
 $script:anchorBottom = $workArea.Bottom - 8
+$screens = [System.Windows.SystemParameters]
+$saved = Get-SavedAnchor $prefs $screens::VirtualScreenLeft $screens::VirtualScreenTop $screens::VirtualScreenWidth $screens::VirtualScreenHeight
+if ($saved) { $script:anchorRight = $saved.right; $script:anchorBottom = $saved.bottom }
+
+function Save-Prefs {
+    $json = @{ right = $script:anchorRight; bottom = $script:anchorBottom; muted = $script:muted } | ConvertTo-Json -Compress
+    try { [IO.File]::WriteAllText($PrefsFile, $json) } catch { }
+}
 
 function Add-Pixels([string[]]$Rows, [int]$GridX, [int]$GridY, [int]$OffsetX, [int]$OffsetY) {
     for ($y = 0; $y -lt $Rows.Count; $y++) {
@@ -135,6 +145,7 @@ function Read-Sessions {
             $mtime = Get-UnixMs (Get-Item -LiteralPath $session.transcript).LastWriteTimeUtc
         }
         $side = Join-Path $SessionsDir $file.BaseName
+        if (Test-SessionAbandoned $session $mtime $now) { Remove-SessionFiles $side; continue }
         $activeTool = ''
         $toolFile = Get-Item -LiteralPath "$side.tool" -ErrorAction SilentlyContinue
         if ($toolFile -and $now - (Get-UnixMs $toolFile.LastWriteTimeUtc) -lt 60000) { $activeTool = [IO.File]::ReadAllText($toolFile.FullName) }
@@ -148,6 +159,8 @@ function Read-Sessions {
             agents     = $agents
             compacting = [bool]($compactFile -and $now - (Get-UnixMs $compactFile.LastWriteTimeUtc) -lt 5 * 60 * 1000)
             took       = [long]$session.took
+            started    = [long]$session.started
+            mood       = [string]$session.mood
             state   = Get-EffectiveState -Session $session -TranscriptMtime $mtime -Now $now -DismissedBefore $script:dismissedBefore
             ts      = [long]$session.ts
             project = [string]$session.project
@@ -172,6 +185,9 @@ function Update-State {
     if ($sessions.Count) {
         foreach ($s in $sessions) {
             $line = "$($s.project): $($Strings.states.($s.state))"
+            if ($s.state -eq 'working' -and $s.started) {
+                $line += ' ' + (Format-Duration ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() - $s.started))
+            }
             if ($s.agents) { $line += ' - ' + ($Strings.agents -f $s.agents) }
             $lines += $line
         }
@@ -189,6 +205,7 @@ function Update-State {
         activeTool = $(if ($top) { $top.activeTool } else { '' })
         agents     = $(if ($top) { $top.agents } else { 0 })
         compacting = [bool]($top -and $top.compacting)
+        mood       = $(if ($top) { $top.mood } else { '' })
     }
 
     if (-not $Styles.ContainsKey($state)) { $bubble.Visibility = 'Collapsed'; return }
@@ -207,6 +224,10 @@ function Update-State {
     $bubbleTitle.Text = if ($top.project) { "$title - $($top.project)" } else { $title }
     $bubbleDetail.Text = $text.detail
     $bubbleDetail.Visibility = if ($text.detail) { 'Visible' } else { 'Collapsed' }
+    if ($bubble.Visibility -ne 'Visible') {
+        $fade = New-Object Windows.Media.Animation.DoubleAnimation -ArgumentList 0.0, 1.0, ([Windows.Duration][TimeSpan]::FromMilliseconds(250))
+        $bubble.BeginAnimation([Windows.UIElement]::OpacityProperty, $fade)
+    }
     $bubble.Visibility = 'Visible'
 }
 
@@ -214,11 +235,11 @@ function Update-State {
 # Gaps and lengths are in ticks (120 ms).
 $ActivityPlans = @{
     idle    = @{
-        Pool   = @('mate', 'music', 'yoyo', 'stretch', 'look', 'gum', 'juggle', 'gamer', 'cat', 'dance', 'meditate')
+        Pool   = @('mate', 'music', 'yoyo', 'stretch', 'look', 'gum', 'juggle', 'gamer', 'cat', 'dance', 'meditate', 'wave', 'balloon', 'butterfly')
         Gap    = @(170, 380); Length = @(50, 85)
     }
     working = @{
-        Pool   = @('idea', 'angry', 'scratch', 'sweat', 'fast', 'think', 'bug', 'search', 'yes', 'facepalm', 'loading', 'matebreak')
+        Pool   = @('idea', 'angry', 'scratch', 'sweat', 'fast', 'think', 'bug', 'search', 'yes', 'facepalm', 'loading', 'matebreak', 'zone')
         Gap    = @(50, 125); Length = @(20, 40)
     }
 }
@@ -304,6 +325,16 @@ function Update-Activity([string]$State) {
             if ($e % 24 -lt 6) { $effects = @(, @('sparkle', 12, -4)) }
             Draw-Sprite 'meditate' 0 $FloatPath[[math]::Floor($e / 2) % $FloatPath.Count] $effects
         }
+        'zone'    { Draw-Sprite $typing 0 0 @(@('note', 13, (-2 - ([math]::Floor($e / 3) % 4))), @('note', 1, (-2 - ([math]::Floor(($e + 6) / 3) % 4)))) }
+        'wave'    { Draw-Sprite $(if ([math]::Floor($e / 3) % 2) { 'attn1' } else { 'attn2' }) }
+        'balloon' { Draw-Sprite 'plain' 0 0 @(, @('balloon', 13, (-1 - [math]::Floor($e / 5) % 2))) }
+        'butterfly' {
+            # Flutters across over the head and back; he follows it with his eyes.
+            # x stays within 0..11: the drawing is 5 wide and the window ends at column 16.
+            $x = [math]::Abs(([math]::Floor($e / 2) % 22) - 11)
+            $wings = if ($e % 2) { 'bfly1' } else { 'bfly2' }
+            Draw-Sprite $(if ($x -lt 6) { 'lookL' } else { 'lookR' }) 0 0 @(, @($wings, $x, (-4 + [math]::Floor($e / 4) % 2)))
+        }
         'mate'    { Draw-Sprite $(if ($e % 27 -lt 15) { 'mate1' } else { 'mate2' }) }
         'music'   {
             $bob = if ([math]::Floor($e / 3) % 2) { -3 } else { 0 }
@@ -368,10 +399,25 @@ function Update-Animation {
             Draw-Sprite $frame 0 0 @(, @('dot', (12 + [math]::Floor($t / 4) % 3), -1))
         }
         'done' {
+            # The celebration follows the answer (Get-DoneMood): asking, could not finish, long or short turn.
+            $mood = $script:current.mood
+            if ($mood -eq 'question') {
+                $frame = if ([math]::Floor($t / 8) % 2) { 'lookL' } else { 'lookR' }
+                Draw-Sprite $frame 0 0 @(, @('what', 7, (-4 - [math]::Floor($t / 4) % 2)))
+                return
+            }
+            if ($mood -eq 'trouble') {
+                Draw-Sprite 'sad' 0 0 @(, @('sweat', 13, (1 + ([math]::Floor($t / 3) % 4))))
+                return
+            }
             $jump = @(0, -6, -12, -15, -12, -6, 0)
             $offset = if ($sinceReaction -lt $jump.Count) { $jump[$sinceReaction] } else { 0 }
             $effects = @()
-            if ($sinceReaction -lt 30) {
+            if ($mood -eq 'quick') {
+                $offset = [math]::Floor($offset / 3)
+                $effects = @(, @('check', 6, -5))
+            }
+            elseif ($sinceReaction -lt 30) {
                 # Confetti falling around the head, positions derived from the tick.
                 foreach ($i in 0..5) {
                     $x = (($i * 7) + 1) % 16
@@ -380,6 +426,7 @@ function Update-Animation {
                 }
             }
             elseif ($t % 60 -lt 6) { $effects = @(, @('sparkle', 13, -3)) }
+            if ($mood -eq 'big') { $effects += , @('trophy', 6, -5) }
             Draw-Sprite 'done' 0 $offset $effects
         }
         'attention' {
@@ -446,13 +493,14 @@ $window.Add_MouseLeftButtonDown({
     else {
         $script:anchorRight = $window.Left + $window.ActualWidth
         $script:anchorBottom = $window.Top + $window.ActualHeight
+        Save-Prefs
     }
 })
 
 $menu = New-Object Windows.Controls.ContextMenu
 $muteItem = New-Object Windows.Controls.MenuItem
-$muteItem.Header = $Strings.mute; $muteItem.IsCheckable = $true
-$muteItem.Add_Click({ $script:muted = $muteItem.IsChecked })
+$muteItem.Header = $Strings.mute; $muteItem.IsCheckable = $true; $muteItem.IsChecked = $script:muted
+$muteItem.Add_Click({ $script:muted = $muteItem.IsChecked; Save-Prefs })
 $quitItem = New-Object Windows.Controls.MenuItem
 $quitItem.Header = $Strings.quit
 $quitItem.Add_Click({ $window.Close() })
@@ -474,11 +522,20 @@ function Invoke-Tick {
 
 if ($SelfTest) {
     try {
+        # Whatever sessions the state folder holds: sweep, hover list and bubble, without sound.
+        $script:muted = $true
+        $script:dismissedBefore = 0
+        Update-State
         foreach ($state in 'idle', 'working', 'done', 'attention', 'error') {
             $script:current = [pscustomobject]@{ state = $state; session = $null }
             $script:reactionTick = $script:tick
             $script:stateSince = $script:tick
             for ($i = 0; $i -lt 40; $i++) { Update-Animation; $script:tick++ }
+        }
+        foreach ($mood in 'question', 'trouble', 'big', 'quick') {
+            $script:current = [pscustomobject]@{ state = 'done'; session = $null; mood = $mood }
+            $script:reactionTick = $script:tick
+            for ($i = 0; $i -lt 70; $i++) { Update-Animation; $script:tick++ }
         }
         # Sleep, then every scene of each plan for its whole length.
         $script:current = [pscustomobject]@{ state = 'idle'; session = $null }

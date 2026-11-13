@@ -16,7 +16,11 @@ $scenes = @(
     @('gum', 'plain', @(, @('gum3', 5, 4))), @('juggle', 'juggle', @(@('ballR', 3, -3), @('ballB', 8, -5), @('ballZ', 13, -3))),
     @('gamer', 'gamer2', @()), @('cat visit', 'lookR', @(@('cat1', 13, 7), @('heart', 11, -3))), @('meditate', 'meditate', @(, @('sparkle', 12, -4))),
     @('bug!', 'work1', @(, @('bug', 6, 7))), @('search', 'work3', @(, @('lens', 10, -5))), @('yes!', 'workYes', @(, @('check', 6, -5))),
-    @('facepalm', 'workPalm', @(, @('sweat', 13, 2))), @('loading', 'work2', @(, @('bar3', 2, -4)))
+    @('facepalm', 'workPalm', @(, @('sweat', 13, 2))), @('loading', 'work2', @(, @('bar3', 2, -4))),
+    @('done: asks', 'lookR', @(, @('what', 7, -5))), @('done: stuck', 'sad', @(, @('sweat', 13, 2))),
+    @('done: long', 'done', @(@('trophy', 6, -5), @('dot', 1, -3), @('dot', 15, -2))), @('done: quick', 'done', @(, @('check', 6, -5))),
+    @('in the zone', 'work1', @(@('note', 13, -3), @('note', 1, -4))), @('wave', 'attn1', @()),
+    @('balloon', 'plain', @(, @('balloon', 13, -1))), @('butterfly', 'lookR', @(, @('bfly1', 10, -4)))
 )
 
 $px = 5; $cellW = 110; $cellH = 110; $cols = 7

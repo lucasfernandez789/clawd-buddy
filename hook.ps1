@@ -62,8 +62,7 @@ try {
         'PreCompact' { [IO.File]::WriteAllText("$side.compact", ''); exit 0 }
         'PostCompact' { Remove-Item -LiteralPath "$side.compact" -ErrorAction SilentlyContinue; exit 0 }
         'SessionEnd' {
-            Remove-Item -LiteralPath $file, "$side.tool", "$side.compact" -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath "$side.agents" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-SessionFiles $side
             exit 0
         }
     }

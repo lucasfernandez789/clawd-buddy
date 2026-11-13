@@ -77,6 +77,22 @@ Assert ($b.title -eq 'Listo en 3m 12s') 'done bubble shows the duration'
 $b = Format-Bubble ([pscustomobject]@{ state = 'done'; took = 0; detail = 'x' }) $es
 Assert ($b.title -eq 'Listo') 'done bubble without duration keeps the plain title'
 
+# Done mood: what the answer says, then how long the turn took.
+Assert ((Get-DoneMood "All set.`n`n**Should I commit it?**" 60000) -eq 'question') 'an answer ending in a question -> question'
+Assert ((Get-DoneMood "Is it broken? No.`nFixed it." 60000) -eq '') 'a question earlier in the answer does not count'
+Assert ((Get-DoneMood "I couldn't run the tests here." 60000) -eq 'trouble' -and (Get-DoneMood 'No pude correr los tests.' 60000) -eq 'trouble') 'an answer that could not finish -> trouble'
+Assert ((Get-DoneMood 'Fixed the error. No errors left, sin errores.' 60000) -eq '') 'mentioning a fixed error is not trouble'
+Assert ((Get-DoneMood "All tests pass.`nI couldn't check it on screen." 60000) -eq '') 'a caveat below a successful opening line is not trouble'
+Assert ((Get-DoneMood 'ok' 700000) -eq 'big' -and (Get-DoneMood 'ok' 5000) -eq 'quick') 'a long turn -> big, a short one -> quick'
+Assert ((Get-DoneMood 'ok' 60000) -eq '' -and (Get-DoneMood 'ok' 0) -eq '') 'a normal or unknown duration keeps the plain celebration'
+Assert ((Get-DoneMood 'Shall I go on?' 700000) -eq 'question') 'the text wins over the duration'
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'UserPromptSubmit' }) $null 1000
+$s = ConvertTo-SessionState (& $ev @{ hook_event_name = 'Stop'; last_assistant_message = "Done.`nWant more?" }) ([pscustomobject]$s) 61000
+Assert ($s.mood -eq 'question' -and $s.detail -eq 'Done.') 'Stop stores the mood next to the first line'
+foreach ($name in 'sad', 'balloon', 'bfly1', 'bfly2') {
+    Assert ($Frames.ContainsKey($name) -or $Overlays.ContainsKey($name)) "drawing '$name' exists"
+}
+
 Assert ((Get-ToolIcon 'Edit') -eq 'pencil' -and (Get-ToolIcon 'Bash') -eq 'term' -and (Get-ToolIcon 'Grep') -eq 'lens' -and (Get-ToolIcon 'WebSearch') -eq 'globe') 'tool families map to icons'
 Assert ((Get-ToolIcon 'Agent') -eq '' -and (Get-ToolIcon '') -eq '') 'other tools have no icon'
 foreach ($icon in 'pencil', 'term', 'lens', 'globe', 'mini', 'press1', 'press2', 'press3', 'code', 'gnocchi', 'pumpkin', 'tree') {
@@ -105,6 +121,14 @@ Assert ((Get-EffectiveState (& $sess 'done' 200) 0 300 150) -eq 'done') 'new ale
 Assert ((Get-EffectiveState (& $sess 'attention' 1000) 5000 6000 0) -eq 'working') 'transcript activity resolves attention'
 Assert ((Get-EffectiveState (& $sess 'working' 0) 0 (16 * 60 * 1000) 0) -eq 'idle') 'silent working session goes stale'
 Assert ((Get-EffectiveState (& $sess 'working' 0) 0 (60 * 1000) 0) -eq 'working') 'recent working session stays working'
+
+$hour = 60 * 60 * 1000
+Assert (Test-SessionAbandoned (& $sess 'idle' 0) 0 (25 * $hour)) 'a session silent for a day is abandoned'
+Assert (-not (Test-SessionAbandoned (& $sess 'idle' 0) (20 * $hour) (25 * $hour))) 'recent transcript output keeps a session'
+
+$a = Get-SavedAnchor ([pscustomobject]@{ right = 500; bottom = 400 }) 0 0 1920 1080
+Assert ($a.right -eq 500 -and $a.bottom -eq 400) 'saved position inside the screens is restored'
+Assert ($null -eq (Get-SavedAnchor ([pscustomobject]@{ right = 3000; bottom = 400 }) 0 0 1920 1080) -and $null -eq (Get-SavedAnchor $null 0 0 1920 1080)) 'position off the screens or missing falls back to the corner'
 
 $pick = Select-DisplaySession @(
     [pscustomobject]@{ state = 'working'; ts = 9 }, [pscustomobject]@{ state = 'attention'; ts = 1 },
@@ -164,8 +188,16 @@ try {
     Assert ($LASTEXITCODE -eq 0) 'bad input still exits 0'
 
     # Avatar renders every state and scene without throwing.
+    $sessionsDir = Join-Path $stateDir 'sessions'
+    [IO.File]::WriteAllText((Join-Path $sessionsDir 'old-1.json'), '{"state":"idle","ts":1,"transcript":""}')
+    [IO.File]::WriteAllText((Join-Path $sessionsDir 'old-1.tool'), 'Edit')
+    $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    [IO.File]::WriteAllText((Join-Path $sessionsDir 'live-1.json'), "{`"state`":`"done`",`"ts`":$nowMs,`"took`":5000,`"project`":`"api`",`"detail`":`"ok`",`"transcript`":`"`"}")
+    [IO.File]::WriteAllText((Join-Path $sessionsDir 'live-2.json'), "{`"state`":`"working`",`"ts`":$nowMs,`"started`":$($nowMs - 5000),`"project`":`"web`",`"transcript`":`"`"}")
     $result = powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -File (Join-Path $root 'avatar.ps1') -StateDir $stateDir -SelfTest
     Assert ($LASTEXITCODE -eq 0) "avatar renders every state and scene ($result)"
+    Assert (-not (Test-Path (Join-Path $sessionsDir 'old-1.json')) -and -not (Test-Path (Join-Path $sessionsDir 'old-1.tool'))) 'avatar sweeps an abandoned session and its side files'
+    Assert (Test-Path (Join-Path $sessionsDir 'live-1.json')) 'avatar keeps a live session'
 }
 finally {
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
